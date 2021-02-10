@@ -1,7 +1,10 @@
 extern crate clap;
+extern crate env_logger;
+extern crate exitcode;
+extern crate log;
 
 use clap::{Arg, App};
-
+use log::{info, error};
 use rust_htslib::{bam, bam::Read};
 
 use std::collections::HashMap;
@@ -23,6 +26,9 @@ const SUPPLEMENTARY_FLAG: u16 = 0x800;
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 fn main() {
+    //initialize logging for our benefit later
+    env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     //open up our test file
     let matches = App::new("rust-flagstat")
         .version(VERSION.unwrap_or("?"))
@@ -35,9 +41,20 @@ fn main() {
             .help("the BAM file to gather stats on"))
         .get_matches();
     
-    let in_fn = matches.value_of("in_fn").unwrap().to_string();
-
-    let mut bam = bam::Reader::from_path(&in_fn).unwrap();
+    let in_fn = match matches.value_of("in_fn") {
+        Some(s) => s.to_string(),
+        None => {
+            error!("an input BAM file must be specified with --input");
+            std::process::exit(exitcode::NOINPUT);
+        }
+    };
+    let mut bam = match bam::Reader::from_path(&in_fn) {
+        Ok(b) => b,
+        Err(e) => {
+            error!("Failed to open input file {:?}", in_fn);
+            std::process::exit(exitcode::IOERR);
+        }
+    };
 
     let mut flag_counts = HashMap::new();
     
